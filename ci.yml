@@ -1,0 +1,61 @@
+name: E-Commerce Inventory CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecommerce_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r backend/requirements.txt
+
+      - name: Check Python Syntax
+        run: |
+          python -m compileall -q backend
+
+      - name: Install PostgreSQL Client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply Database Scripts
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d ecommerce_db -v ON_ERROR_STOP=1 -f database/schema.sql
+          psql -h localhost -U postgres -d ecommerce_db -v ON_ERROR_STOP=1 -f database/functions.sql
+          psql -h localhost -U postgres -d ecommerce_db -v ON_ERROR_STOP=1 -f database/triggers.sql
+          psql -h localhost -U postgres -d ecommerce_db -v ON_ERROR_STOP=1 -f database/sample_data.sql
+
+      - name: Verify Database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d ecommerce_db -c "SELECT COUNT(*) FROM products;"
